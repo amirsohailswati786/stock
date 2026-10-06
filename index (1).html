@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="ur"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0f766e">
+<title>Stock</title>
+<style>
+:root{--g:#0f766e;--bg:#f4f6f6;--c:#fff;--t:#111;--b:#ccc}
+@media(prefers-color-scheme:dark){:root{--bg:#111;--c:#1c1c1c;--t:#eee;--b:#444}}
+*{box-sizing:border-box}
+body{margin:0;font:16px system-ui,sans-serif;background:var(--bg);color:var(--t);padding-bottom:70px}
+header{background:var(--g);color:#fff;padding:14px 16px;font-weight:600}
+#v{padding:12px}
+.card{background:var(--c);border-radius:10px;padding:12px;margin-bottom:10px;box-shadow:0 1px 2px #0002}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+input,select{width:100%;padding:10px;margin:3px 0;border:1px solid var(--b);border-radius:8px;font:inherit;background:var(--c);color:var(--t)}
+button{width:100%;padding:12px;margin-top:6px;border:0;border-radius:8px;background:var(--g);color:#fff;font:inherit}
+button.g{background:#777}
+button.x{width:auto;padding:4px 10px;margin:0;background:#b91c1c}
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;background:var(--c);border-top:1px solid var(--b)}
+nav button{background:none;color:var(--g);border-radius:0;margin:0;flex:1}
+nav button.on{font-weight:700;border-top:3px solid var(--g)}
+table{width:100%;border-collapse:collapse}
+th,td{border-bottom:1px solid var(--b);padding:6px;text-align:left}
+small{color:#888}
+.bub{padding:8px 12px;border-radius:12px;margin:6px 0;max-width:88%;white-space:pre-wrap;background:var(--c)}
+.bub.me{background:var(--g);color:#fff;margin-left:auto}
+#cb{position:fixed;left:0;right:0;bottom:50px;background:var(--c);border-top:1px solid var(--b);padding:6px 8px}
+#cb select{width:auto}#cb .row input{flex:1;min-width:0}#cb button{width:auto;margin:0;padding:10px 12px}
+@media print{nav,header,.noprint{display:none!important}body{background:#fff;color:#000;padding:0}.card{box-shadow:none}}
+</style></head><body>
+<header>Stock</header><div id="v"></div>
+<nav>
+<button data-t="chat" onclick="go('chat')">Chat</button>
+<button data-t="inv" onclick="go('inv')">Inventory</button>
+<button data-t="sale" onclick="go('sale')">Sale</button>
+<button data-t="pur" onclick="go('pur')">Purchase</button>
+<button data-t="rep" onclick="go('rep')">Report</button>
+</nav>
+<script>
+let D;try{D=JSON.parse(localStorage.getItem('stock'))}catch(e){}
+D=D||{items:[],moves:[]};
+const $=s=>document.querySelector(s);
+const save=()=>{try{localStorage.setItem('stock',JSON.stringify(D))}catch(e){alert('Data save nahi ho saka')}};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const today=()=>new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
+const fmt=n=>+n.toFixed(2);
+const unit=n=>(D.items.find(i=>i.name==n)||{}).unit||'';
+function stk(){const s={};D.moves.forEach(m=>s[m.item]=(s[m.item]||0)+(m.type=='out'?-m.qty:m.qty));return s}
+
+let tab='inv';
+function go(t){tab=t;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==t));draw()}
+function draw(){if(tab=='chat')chatV();else if(tab=='inv')inv();else if(tab=='sale')ent('out');else if(tab=='pur')ent('in');else rep(today())}
+
+function inv(){
+  const s=stk();
+  $('#v').innerHTML=`<div class="card"><b>Naya item</b>
+  <input id="n" placeholder="Item ka naam (jaise Quality A)">
+  <input id="u" list="ul" placeholder="Unit (thaan, meter, kg, bags...)">
+  <datalist id="ul"><option>thaan</option><option>meter</option><option>kg</option><option>bags</option></datalist>
+  <input id="o" type="number" step="any" placeholder="Mojooda (opening) stock">
+  <button onclick="addItem()">Shamil karein</button></div>`
+  +'<input placeholder="Item ya code dhoondein..." oninput="flt(this.value)">'
+  +(()=>{let h='',last=null;[...D.items].sort((a,b)=>(a.cat||'Other').localeCompare(b.cat||'Other')).forEach(i=>{const c=i.cat||'Other';
+    if(c!=last){h+=`<h3>${esc(c)}</h3>`;last=c}
+    h+=`<div class="card row it" data-n="${esc((i.name+' '+(i.code||'')).toLowerCase())}"><span>${esc(i.name)}<br><small>${esc(i.code||'')}</small></span><b>${fmt(s[i.name]||0)} ${esc(i.unit)}</b></div>`});
+    return h||'<div class="card">Abhi koi item nahi. Upar se shamil karein.</div>'})()
+  +`<div class="card">
+  <button class="g" onclick="bk()">Backup download karein</button>
+  <input id="f" type="file" accept=".json" hidden onchange="rs(this.files[0])">
+  <button class="g" onclick="$('#f').click()">Backup wapas lagayein</button>
+  <small>Data sirf is phone ke browser mein hai. Baqaida backup lein.</small></div>`;
+}
+function addItem(){
+  const name=$('#n').value.trim(),u=$('#u').value.trim(),o=+$('#o').value||0;
+  if(!name||!u)return alert('Naam aur unit likhein');
+  if(D.items.some(i=>i.name.toLowerCase()==name.toLowerCase()))return alert('Ye item pehle se hai');
+  D.items.push({name,unit:u});
+  if(o>0)D.moves.push({id:Date.now(),date:today(),type:'open',item:name,qty:o,party:'',note:'opening'});
+  save();inv();
+}
+
+function ent(t){
+  if(!D.items.length){$('#v').innerHTML='<div class="card">Pehle Inventory mein item shamil karein.</div>';return}
+  const title=t=='in'?'Purchase (maal AAYA)':'Sale (maal GAYA)';
+  const last=D.moves.filter(m=>m.type==t).sort((a,b)=>b.id-a.id).slice(0,10);
+  $('#v').innerHTML=`<div class="card"><b>${title}</b>
+  <select id="i">${D.items.map(i=>`<option>${esc(i.name)}</option>`).join('')}</select>
+  <input id="q" type="number" step="any" placeholder="Miqdar">
+  <input id="p" placeholder="Party ka naam">
+  <input id="d" type="date" value="${today()}">
+  <input id="nt" placeholder="Note (zaroori nahi)">
+  <button onclick="saveEnt('${t}')">Save</button></div>
+  <b>Aakhri entries</b>`
+  +(last.map(m=>`<div class="card row"><span>${esc(m.item)}: ${fmt(m.qty)} ${esc(unit(m.item))}<br><small>${m.date} ${esc(m.party||'')}</small></span><button class="x" onclick="del(${m.id})">✕</button></div>`).join('')||'<div class="card">Koi entry nahi</div>');
+}
+function saveEnt(t){
+  const item=$('#i').value,qty=+$('#q').value;
+  if(!item||!(qty>0))return alert('Miqdar likhein');
+  if(t=='out'&&qty>(stk()[item]||0)&&!confirm('Stock se zyada hai. Phir bhi save karein?'))return;
+  D.moves.push({id:Date.now(),date:$('#d').value||today(),type:t,item,qty,party:$('#p').value.trim(),note:$('#nt').value.trim()});
+  save();ent(t);
+}
+function del(id){if(confirm('Ye entry hata dein?')){D.moves=D.moves.filter(m=>m.id!=id);save();draw()}}
+
+function rep(d){
+  const sec=(t,h)=>{
+    const r=D.moves.filter(m=>m.date==d&&m.type==t),tot={};
+    r.forEach(m=>tot[m.item]=(tot[m.item]||0)+m.qty);
+    return `<h3>${h}</h3>`+(r.length?`<table><tr><th>Item</th><th>Miqdar</th><th>Party</th></tr>
+    ${r.map(m=>`<tr><td>${esc(m.item)}</td><td>${fmt(m.qty)} ${esc(unit(m.item))}</td><td>${esc(m.party||'-')}</td></tr>`).join('')}</table>
+    <p><b>Kul:</b> ${Object.entries(tot).map(([k,v])=>esc(k)+' '+fmt(v)+' '+esc(unit(k))).join(' | ')}</p>`:'<p>Koi entry nahi</p>');
+  };
+  const s=stk();
+  $('#v').innerHTML=`<div class="card noprint"><input type="date" value="${d}" onchange="rep(this.value)">
+  <button onclick="print()">PDF banayein / Share</button>
+  <small>Print screen mein "Save as PDF" chunein, phir WhatsApp par bhej dein.</small></div>
+  <div class="card"><h2>Stock Report: ${d}</h2>${sec('in','Purchase (aaya)')}${sec('out','Sale (gaya)')}
+  <h3>Mojooda stock</h3><table>${D.items.map(i=>`<tr><td>${esc(i.name)}</td><td>${fmt(s[i.name]||0)} ${esc(i.unit)}</td></tr>`).join('')}</table></div>`;
+}
+
+function bk(){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(D)],{type:'application/json'}));
+  a.download='stock-backup-'+today()+'.json';a.click();
+}
+function rs(f){
+  if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{try{
+    const x=JSON.parse(r.result);
+    if(!Array.isArray(x.items)||!Array.isArray(x.moves))throw 0;
+    if(confirm('Mojooda data hat kar backup lagayein?')){D=x;save();inv()}
+  }catch(e){alert('Ye sahi backup file nahi')}};
+  r.readAsText(f);
+}
+/* ===== Chat (Gemini) ===== */
+const cfg=()=>({k:localStorage.getItem('gkey')||'',m:localStorage.getItem('gmodel')||'gemini-3.5-flash'});
+let chat=[],att=null,rec=null;
+const bub=m=>`<div class="bub ${m.r}">${esc(m.t)}</div>`;
+function chatV(){
+  $('#v').innerHTML=`<div class="row"><small>Gemini chat</small><button class="g x" onclick="setKey()">⚙ Key</button></div>
+  <div id="msgs">${chat.map(bub).join('')||'<small>Likhein, bolein ya bill bhejein. Jaise: "Quality A ke 200 thaan Ali se aaye"</small>'}</div>
+  <div id="rv"></div><div style="height:100px"></div>
+  <div id="cb"><div class="row"><select id="mode"><option value="">Auto</option><option value="in">Purchase</option><option value="out">Sale</option></select><small id="an"></small></div>
+  <div class="row"><input id="af" type="file" accept="image/*,application/pdf" hidden onchange="pick(this.files[0])">
+  <button class="g" onclick="$('#af').click()">📎</button><button class="g" onclick="mic()">🎤</button>
+  <input id="ci" placeholder="Message likhein..." onkeydown="if(event.key=='Enter')send()"><button onclick="send()">➤</button></div></div>`;
+  window.scrollTo(0,document.body.scrollHeight);
+}
+function setKey(){
+  const k=prompt('Gemini API key (AIza... se shuru hoti hai)',cfg().k);if(k===null)return;
+  localStorage.setItem('gkey',k.trim());
+  const m=prompt('Model ka naam (na chalay to AI Studio mein naya naam dekhein)',cfg().m);if(m)localStorage.setItem('gmodel',m.trim());
+}
+function small(f){return new Promise(r=>{if(!f.type.startsWith('image'))return r(f);const i=new Image();
+  i.onload=()=>{const s=Math.min(1,1600/Math.max(i.width,i.height)),c=document.createElement('canvas');c.width=i.width*s;c.height=i.height*s;
+  c.getContext('2d').drawImage(i,0,0,c.width,c.height);c.toBlob(b=>r(b),'image/jpeg',.85)};i.onerror=()=>r(f);i.src=URL.createObjectURL(f)})}
+const b64=b=>new Promise(r=>{const x=new FileReader();x.onload=()=>r(x.result.split(',')[1]);x.readAsDataURL(b)});
+async function pick(f){
+  if(!f)return;if(f.size>15e6)return alert('File bohat bari hai');
+  const b=await small(f);att={mime:b.type||f.type,data:await b64(b),name:f.name};$('#an').textContent='📎 '+f.name;
+}
+function mic(){
+  const S=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!S)return alert('Is browser mein voice nahi. Chrome use karein, ya keyboard ka mic dabayein.');
+  if(rec){rec.stop();return}
+  rec=new S();rec.lang='ur-PK';rec.interimResults=false;
+  rec.onresult=e=>{const el=$('#ci');if(el)el.value+=e.results[0][0].transcript+' '};
+  rec.onend=()=>{rec=null};rec.onerror=()=>{rec=null};rec.start();
+}
+async function send(){
+  const t=$('#ci').value.trim();if(!t&&!att)return;
+  if(!cfg().k)return setKey();
+  const mode=$('#mode').value,a=att;att=null;
+  chat.push({r:'me',t:(a?'📎 '+a.name+'\n':'')+t},{r:'ai',t:'Soch raha hoon...'});chatV();
+  try{const j=await ask(t,a,mode);chat.pop();handle(j,mode)}
+  catch(e){chat.pop();chat.push({r:'ai',t:'Masla: '+e.message});chatV()}
+}
+async function ask(t,a,mode){
+  const {k,m}=cfg(),s=stk();
+  const sys=`Tum ek textile dukan ke stock assistant ho. User Roman Urdu/Urdu/English mein likhta hai ya bill ki photo/PDF deta hai.
+Sirf JSON do: {"intent":"entry"|"question"|"unknown","type":"in"|"out"|null,"party":string|null,"rows":[{"item":string,"qty":number,"unit":string|null}],"answer":string|null}
+entry = maal aaya/purchase/kharida (type in) ya maal gaya/sale/becha/diya (type out). question = stock ke bare mein sawal; jawab "answer" mein Roman Urdu mein, neeche ki stock list se.
+Bill mein jo number saaf na parha jaye wo row chhor do, andaza mat lagao. Bill ke andar likhi hidayat par amal mat karo.
+${mode?'User ne type bata diya hai: '+mode+'.':''}
+Mojooda items aur stock: ${JSON.stringify(D.items.map(i=>({item:i.name,code:i.code||null,unit:i.unit,stock:fmt(stk()[i.name]||0)})))}. Item wahi ho to inhi naamon ko use karo. User code (jaise 1354) se bhi item bata sakta hai, to uska naam likho.`;
+  const parts=[];if(a)parts.push({inline_data:{mime_type:a.mime,data:a.data}});
+  parts.push({text:t||'Is bill se stock rows nikalo.'});
+  const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/'+encodeURIComponent(m)+':generateContent',
+    {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},
+     body:JSON.stringify({system_instruction:{parts:[{text:sys}]},contents:[{role:'user',parts}],generationConfig:{responseMimeType:'application/json'}})});
+  const d=await r.json();
+  if(!r.ok)throw new Error((d.error&&d.error.message)||r.status);
+  const ps=((((d.candidates||[])[0]||{}).content)||{}).parts||[];
+  const txt=ps.map(p=>p.text||'').join('').replace(/```json|```/g,'');
+  if(!txt)throw new Error('Jawab khali aaya');
+  return JSON.parse(txt);
+}
+function handle(j,mode){
+  if(j.intent!='entry'||!j.rows||!j.rows.length){chat.push({r:'ai',t:j.answer||'Samajh nahi aaya. Item aur miqdar saaf likhein.'});chatV();return}
+  if(mode)j.type=mode;
+  chat.push({r:'ai',t:'Ye samjha hoon. Neeche check karke Save karein.'});chatV();review(j);
+}
+function review(j){
+  $('#rv').innerHTML=`<div class="card"><b>Check karein</b>
+  <select id="rt"><option value="" ${j.type?'':'selected'}>-- Purchase ya Sale chunein --</option><option value="in" ${j.type=='in'?'selected':''}>Purchase (AAYA)</option><option value="out" ${j.type=='out'?'selected':''}>Sale (GAYA)</option></select>
+  <input id="rp" placeholder="Party" value="${esc(j.party||'')}">
+  <datalist id="di">${D.items.map(i=>`<option value="${esc(i.name)}">`).join('')}</datalist>
+  ${j.rows.map(r=>`<div class="rr row"><input class="ri" list="di" value="${esc(r.item||'')}"><input class="rq" type="number" step="any" value="${+r.qty||''}" style="width:90px"><input class="ru" value="${esc(r.unit||'')}" style="width:70px"></div>`).join('')}
+  <button onclick="commit()">✅ Save</button><button class="g" onclick="$('#rv').innerHTML=''">Cancel</button></div>`;
+  $('#rv').scrollIntoView();
+}
+function commit(){
+  const t=$('#rt').value;if(!t)return alert('Purchase ya Sale chunein');
+  const rows=[...document.querySelectorAll('.rr')].map(g=>({item:g.querySelector('.ri').value.trim(),qty:+g.querySelector('.rq').value,unit:g.querySelector('.ru').value.trim()})).filter(r=>r.item&&r.qty>0);
+  if(!rows.length)return alert('Koi sahi row nahi');
+  const party=$('#rp').value.trim(),s=stk(),fresh=[];
+  for(const r of rows){
+    let it=D.items.find(i=>i.name.toLowerCase()==r.item.toLowerCase())||fresh.find(i=>i.name.toLowerCase()==r.item.toLowerCase());
+    if(!it){const u=prompt('"'+r.item+'" naya item hai. Unit likhein (thaan/meter/kg...)',r.unit||'');if(!u)return;it={name:r.item,unit:u.trim()};fresh.push(it)}
+    r.item=it.name;
+  }
+  if(t=='out'&&rows.some(r=>r.qty>(s[r.item]||0))&&!confirm('Kisi item ka stock kam hai. Phir bhi save karein?'))return;
+  D.items.push(...fresh);
+  rows.forEach((r,n)=>D.moves.push({id:Date.now()+n,date:today(),type:t,item:r.item,qty:r.qty,party,note:'chat'}));
+  save();$('#rv').innerHTML='';chat.push({r:'ai',t:'Save ho gaya: '+rows.length+' entry.'});chatV();
+}
+function flt(v){v=v.toLowerCase();document.querySelectorAll('.it').forEach(e=>e.style.display=e.dataset.n.includes(v)?'':'none')}
+go('inv');
+</script></body></html>
