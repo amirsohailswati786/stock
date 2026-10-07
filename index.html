@@ -42,22 +42,38 @@ const fmt=n=>(+n).toLocaleString('en-US',{maximumFractionDigits:2});
 const unit=n=>(D.items.find(i=>i.name==n)||{}).unit||'';
 function stk(){const s={};D.moves.forEach(m=>s[m.item]=(s[m.item]||0)+(m.type=='out'?-m.qty:m.qty));return s}
 
+const fmt3=n=>(+n).toLocaleString('en-US',{maximumFractionDigits:3});
+if(!localStorage.getItem('m1')){const y=D.items.find(i=>i.code=='1367'&&i.unit=='kg');if(y){y.unit='lbs';save()}try{localStorage.setItem('m1','1')}catch(e){}}
+function gsum(){
+  const s=stk(),C={},U=new Set();let g=0;
+  D.items.forEach(i=>{const c=i.cat||'Other',q=s[i.name]||0,o=C[c]=C[c]||{};o[i.unit]=(o[i.unit]||0)+q;g+=q;U.add(i.unit)});
+  return {rows:['Fabric','Grey','Yarn','Other'].filter(c=>C[c]).map(c=>[c,Object.entries(C[c]).map(([u,v])=>fmt3(v)+' '+u).join(' + ')]),grand:fmt3(g),mixed:U.size>1};
+}
+function gHtml(){
+  const G=gsum();
+  return G.rows.map(r=>`<div class="row" style="margin-top:6px"><span>${esc(r[0])}</span><b>${esc(r[1])}</b></div>`).join('')
+  +`<div class="row" style="border-top:1px solid var(--b);margin-top:8px;padding-top:8px"><b>Kul jama (sab ka)</b><b>${G.grand}</b></div>`
+  +(G.mixed?'<small>Meter aur lbs ka jama sirf number ka hai.</small>':'');
+}
+function chUnit(k){const i=D.items[k];if(!i)return;const u=prompt('"'+i.name+'" ki nayi unit (meter, kg, lbs, thaan...)',i.unit);
+  if(u&&u.trim()&&u.trim()!=i.unit){i.unit=u.trim();save();inv()}}
 let tab='inv';
 function go(t){tab=t;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==t));draw()}
 function draw(){if(tab=='inv')inv();else if(tab=='sale')ent('out');else if(tab=='pur')ent('in');else rep(today())}
 
 function inv(){
   const s=stk();
-  $('#v').innerHTML=`<div class="card"><b>Naya item</b>
+  $('#v').innerHTML=`<div class="card"><b>Gudam mein kul maal</b>${gHtml()}<small>Unit badalne ke liye item ki unit par dabayein.</small></div>
+  <div class="card"><b>Naya item</b>
   <input id="n" placeholder="Item ka naam (jaise Quality A)">
   <input id="u" list="ul" placeholder="Unit (thaan, meter, kg, bags...)">
-  <datalist id="ul"><option>thaan</option><option>meter</option><option>kg</option><option>bags</option></datalist>
+  <datalist id="ul"><option>thaan</option><option>meter</option><option>kg</option><option>lbs</option><option>bags</option></datalist>
   <input id="o" type="number" step="any" placeholder="Mojooda (opening) stock">
   <button onclick="addItem()">Shamil karein</button></div>`
   +'<input placeholder="Item ya code dhoondein..." oninput="flt(this.value)">'
   +(()=>{let h='',last=null;[...D.items].sort((a,b)=>(a.cat||'Other').localeCompare(b.cat||'Other')).forEach(i=>{const c=i.cat||'Other';
     if(c!=last){h+=`<h3>${esc(c)}</h3>`;last=c}
-    h+=`<div class="card row it" data-n="${esc((i.name+' '+(i.code||'')).toLowerCase())}"><span>${esc(i.name)}<br><small>${esc(i.code||'')}</small></span><b>${fmt(s[i.name]||0)} ${esc(i.unit)}</b></div>`});
+    h+=`<div class="card row it" data-n="${esc((i.name+' '+(i.code||'')).toLowerCase())}"><span>${esc(i.name)}<br><small>${esc(i.code||'')}</small></span><b>${fmt(s[i.name]||0)} <u style="cursor:pointer" onclick="chUnit(${D.items.indexOf(i)})">${esc(i.unit)}</u></b></div>`});
     return h||'<div class="card">Abhi koi item nahi. Upar se shamil karein.</div>'})()
   +`<div class="card">
   <button class="g" onclick="bk()">Backup lein (Share / Download)</button>
@@ -114,7 +130,8 @@ function rep(d){
   ${ck(ONLY,'ONLY','Sirf total dikhayein (item ke naam ke baghair)')}${ONLY?'':ck(WS,'WS','Mojooda stock bhi shamil karein')}
   <button onclick="pdf()">PDF banayein / Share</button><div id="pl"></div></div>
   <div class="card"><b>Aaj ka khulasa (${d})</b>
-  ${R.sec.map(x=>`<div class="row" style="margin-top:8px"><span>${x.h}</span><b>${esc(x.tot||'0')}</b></div>`).join('')}</div>
+  ${R.sec.map(x=>`<div class="row" style="margin-top:8px"><span>${x.h}</span><b>${esc(x.tot||'0')}</b></div>`).join('')}
+  <h3>Gudam mein kul maal</h3>${gHtml()}</div>
   ${ONLY?'':`<div class="card">${R.sec.map(x=>`<h3>${x.h}</h3>`+tb(x.rows,x.tot)).join('')}
   ${R.stock?'<h3>Mojooda stock</h3>'+tb(R.stock,''):''}</div>`}`;
 }
@@ -142,6 +159,7 @@ async function pdf(){
   const d=$('#d').value,R=repModel(d,WS),L=[];
   L.push({k:'h1',t:'STOCK REPORT'},{k:'sub',t:d},{k:'gap'},{k:'h2',t:'Aaj ka khulasa'});
   R.sec.forEach(x=>L.push({k:'sum',c:[x.h,x.tot||'0']}));
+  const G=gsum();L.push({k:'gap'},{k:'h2',t:'Gudam mein kul maal'});G.rows.forEach(r=>L.push({k:'sum',c:r}));L.push({k:'sum',c:['Kul jama (sab ka)',G.grand]});
   if(!ONLY){L.push({k:'gap'});
     R.sec.forEach(x=>{L.push({k:'h2',t:x.h});
       if(x.rows.length){L.push({k:'th',c:['Item','Miqdar','Party']});x.rows.forEach(r=>L.push({k:'row',c:r}));L.push({k:'tot',t:'KUL: '+x.tot})}
