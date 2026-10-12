@@ -154,8 +154,8 @@ function gHtml(){
 }
 function chUnit(k){const i=D.items[k];if(!i)return;const u=prompt('"'+i.name+'" ki nayi unit (meter, kg, lbs, thaan...)',i.unit);
   if(u&&u.trim()&&u.trim()!=i.unit){i.unit=u.trim();save();inv()}}
-let tab='inv';
-function go(t){tab=t;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==t));draw()}
+let tab='inv';let EID=null,PID=null;
+function go(t){EID=null;PID=null;tab=t;document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t==t));draw()}
 function draw(){if(tab=='inv')inv();else if(tab=='sale')ent('out');else if(tab=='pur')ent('in');else if(tab=='acc')acc();else if(tab=='pay')pay();else if(RT=='a')arep();else rep(today())}
 
 function inv(){
@@ -170,7 +170,7 @@ function inv(){
   +'<input placeholder="Item ya code dhoondein..." oninput="flt(this.value)">'
   +(()=>{let h='',last=null;[...D.items].sort((a,b)=>(a.cat||'Other').localeCompare(b.cat||'Other')).forEach(i=>{const c=i.cat||'Other';
     if(c!=last){h+=`<h3>${esc(c)}</h3>`;last=c}
-    h+=`<div class="card row it" data-n="${esc((i.name+' '+(i.code||'')).toLowerCase())}"><span>${esc(i.name)}<br><small>${esc(i.code||'')}</small></span><b>${fmt(s[i.name]||0)} <u style="cursor:pointer" onclick="chUnit(${D.items.indexOf(i)})">${esc(i.unit)}</u></b></div>`});
+    h+=`<div class="card row it" data-n="${esc((i.name+' '+(i.code||'')).toLowerCase())}"><span>${esc(i.name)}<br><small>${esc(i.code||'')}</small></span><span style="display:flex;gap:8px;align-items:center"><b>${fmt(s[i.name]||0)} <u style="cursor:pointer" onclick="chUnit(${D.items.indexOf(i)})">${esc(i.unit)}</u></b><button class="x" style="background:#0369a1" onclick="editItem(${D.items.indexOf(i)})">Edit</button></span></div>`});
     return h||'<div class="card">Abhi koi item nahi. Upar se shamil karein.</div>'})()
   +`<div class="card">
   <button class="g" onclick="bk()">Backup lein (Share / Download)</button>
@@ -189,30 +189,37 @@ function addItem(){
 
 function ent(t){
   if(!D.items.length){$('#v').innerHTML='<div class="card">Pehle Inventory mein item shamil karein.</div>';return}
-  const title=t=='in'?'Purchase (maal AAYA)':'Sale (maal GAYA)';
-  const last=D.moves.filter(m=>m.type==t).sort((a,b)=>b.id-a.id).slice(0,10);
-  $('#v').innerHTML=`<div id="pl"></div><div class="card"><b>${title}</b>
-  <select id="i">${D.items.map(i=>`<option>${esc(i.name)}</option>`).join('')}</select>
-  <input id="q" type="number" step="any" placeholder="Miqdar" oninput="calcT()">
-  <input id="r" type="number" step="any" placeholder="Rate (zaroori nahi)" oninput="calcT()">
-  <div class="row"><span>Total</span><b id="tot">0</b></div>
-  <input id="p" list="apl" placeholder="Party (Accounts se chunein)">${dl()}
-  <input id="d" type="date" value="${today()}">
-  <input id="nt" placeholder="Note (zaroori nahi)">
-  <button onclick="saveEnt('${t}')">Save</button></div>
-  <b>Aakhri entries</b>`
-  +(last.map(m=>`<div class="card row"><span>${esc(m.item)}: ${fmt(m.qty)} ${esc(unit(m.item))}${m.total?' × '+fmt(m.rate)+' = <b>'+fmt(m.total)+'</b>':''}<br><small>${m.date} ${esc(m.party||'')}</small></span><span style="white-space:nowrap">${m.total?'<button class="x" style="background:var(--g)" onclick="bill('+m.id+')">Bill</button> ':''}<button class="x" onclick="del(${m.id})">✕</button></span></div>`).join('')||'<div class="card">Koi entry nahi</div>');
+  const E=EID?D.moves.find(m=>m.id==EID&&m.type==t):null;if(!E)EID=null;
+  const e=E||{},title=(t=='in'?'Purchase (maal AAYA)':'Sale (maal GAYA)')+(E?' - EDIT':'');
+  const H=D.moves.filter(m=>m.type==t).sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:b.id-a.id);
+  $('#v').innerHTML=`<div id="pl"></div><div class="card" ${E?'style="border:2px solid #0369a1"':''}><b>${title}</b>
+  <select id="i">${D.items.map(i=>`<option ${i.name==e.item?'selected':''}>${esc(i.name)}</option>`).join('')}</select>
+  <input id="q" type="number" step="any" placeholder="Miqdar" value="${e.qty||''}" oninput="calcT()">
+  <input id="r" type="number" step="any" placeholder="Rate (zaroori nahi)" value="${e.rate||''}" oninput="calcT()">
+  <div class="row"><span>Total</span><b id="tot">${e.total?fmt(e.total):0}</b></div>
+  <input id="p" list="apl" placeholder="Party (Accounts se chunein)" value="${esc(e.party||'')}">${dl()}
+  <input id="d" type="date" value="${e.date||today()}">
+  <input id="nt" placeholder="Note (zaroori nahi)" value="${esc(e.note||'')}">
+  <button onclick="saveEnt('${t}')">${E?'Update karein':'Save'}</button>${E?`<button class="g" onclick="EID=null;ent('${t}')">Cancel</button>`:''}</div>
+  <b>Saari entries (${H.length})</b>
+  <input id="hq" placeholder="Party / item / note dhoondein..." oninput="fh()">
+  <input id="hd" type="date" onchange="fh()">
+  <small>Kisi bhi purani tareekh ki entry ko Edit ya hata sakte hain.</small>`
+  +(H.map(m=>`<div class="card row hc" data-n="${esc((m.item+' '+(m.party||'')+' '+(m.note||'')).toLowerCase())}" data-d="${m.date}"><span>${esc(m.item)}: ${fmt(m.qty)} ${esc(unit(m.item))}${m.total?' × '+fmt(m.rate)+' = <b>'+fmt(m.total)+'</b>':''}<br><small>${m.date} ${esc(m.party||'')} ${esc(m.note||'')}</small></span><span style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end"><button class="x" style="background:#0369a1" onclick="EID=${m.id};ent('${t}');scrollTo(0,0)">Edit</button>${m.total?`<button class="x" style="background:var(--g)" onclick="bill(${m.id})">Bill</button>`:''}<button class="x" onclick="del(${m.id})">✕</button></span></div>`).join('')||'<div class="card">Koi entry nahi</div>');
 }
+function fh(){const q=$('#hq').value.toLowerCase(),d=$('#hd').value;document.querySelectorAll('.hc').forEach(c=>c.style.display=(!q||c.dataset.n.includes(q))&&(!d||c.dataset.d==d)?'':'none')}
 function saveEnt(t){
-  const item=$('#i').value,qty=+$('#q').value;
+  const item=$('#i').value,qty=+$('#q').value,E=EID?D.moves.find(m=>m.id==EID):null;
   if(!item||!(qty>0))return alert('Miqdar likhein');
-  if(t=='out'&&qty>(stk()[item]||0)&&!confirm('Stock se zyada hai. Phir bhi save karein?'))return;
+  if(t=='out'){let av=stk()[item]||0;if(E&&E.type=='out'&&E.item==item)av+=E.qty;
+    if(qty>av&&!confirm('Stock se zyada hai. Phir bhi save karein?'))return}
   const party=$('#p').value.trim(),rate=+$('#r').value||0,A=accBy(party);
   if(rate>0&&!A&&!confirm('Ye party Accounts mein nahi hai. Sirf stock mein save karein (account mein nahi)?'))return;
-  D.moves.push({id:Date.now(),date:$('#d').value||today(),type:t,item,qty,party,note:$('#nt').value.trim(),rate,total:rate>0?Math.round(qty*rate*100)/100:0,acc:A?A.no:''});
-  save();ent(t);
+  const o={date:$('#d').value||today(),type:t,item,qty,party,note:$('#nt').value.trim(),rate,total:rate>0?Math.round(qty*rate*100)/100:0,acc:A?A.no:''};
+  if(E)Object.assign(E,o);else D.moves.push({id:Date.now(),...o});
+  EID=null;save();ent(t);
 }
-function del(id){if(confirm('Ye entry hata dein?')){D.moves=D.moves.filter(m=>m.id!=id);save();draw()}}
+function del(id){if(confirm('Ye entry hata dein?')){D.moves=D.moves.filter(m=>m.id!=id);EID=null;save();draw()}}
 
 let WS=false,ONLY=false;
 function repModel(d,ws){
@@ -340,11 +347,77 @@ function addAcc(){
 }
 function editAcc(no){
   const a=D.acc.find(x=>x.no==no);if(!a)return;
-  const r=prompt(a.name+'\nNaya balance likhein (Debit = plus, Credit = minus).\nAccount hatane ke liye "hata" likhein.',cur(a));
-  if(r===null)return;
-  if(r.trim().toLowerCase()=='hata'){if(confirm('"'+a.name+'" hata dein?')){D.acc=D.acc.filter(x=>x!==a);save();acc()}return}
-  const v=+r.replace(/,/g,'');if(isNaN(v))return alert('Sahi number likhein');
-  a.bal=v-(cur(a)-a.bal);save();acc();
+  $('#v').innerHTML=`<div class="card" style="border:2px solid #0369a1"><b>Account edit</b>
+  <small>Category</small><select id="xc">${['C','D','B'].map(c=>`<option value="${c}" ${c==a.cat?'selected':''}>${CN[c]}</option>`).join('')}</select>
+  <small>Account no</small><input id="xn" type="number" value="${esc(a.no)}">
+  <small>Party ka naam</small><input id="xm" value="${esc(a.name)}">
+  <small>Opening balance (shuru ka)</small><input id="xb" type="number" step="any" value="${Math.abs(a.bal)}">
+  <select id="xt"><option value="1" ${a.bal>=0?'selected':''}>Debit</option><option value="-1" ${a.bal<0?'selected':''}>Credit</option></select>
+  <div class="row"><span>Mojooda balance (entries ke baad)</span><b>${bs(cur(a))}</b></div>
+  <button onclick="saveAcc('${esc(a.no)}')">Save</button>
+  <button class="g" onclick="stmt('${esc(a.no)}')">Statement (sari entries) dekhein</button>
+  <button class="g" onclick="acc()">Cancel</button>
+  <button style="background:#b91c1c" onclick="delAcc('${esc(a.no)}')">Account hata dein</button></div>`;
+  scrollTo(0,0);
+}
+function saveAcc(old){
+  const a=D.acc.find(x=>x.no==old);if(!a)return;
+  const no=$('#xn').value.trim(),name=$('#xm').value.trim();
+  if(!name||!no)return alert('Naam aur account no likhein');
+  if(no!=old&&D.acc.some(x=>x.no==no))return alert('Ye account no pehle se hai');
+  if(D.acc.some(x=>x!==a&&x.name.toLowerCase()==name.toLowerCase())&&!confirm('Is naam ka account pehle se hai. Phir bhi save karein?'))return;
+  if(no!=old){D.moves.forEach(m=>{if(m.acc==old)m.acc=no});(D.pay||[]).forEach(p=>{if(p.acc==old)p.acc=no;if(p.bank==old)p.bank=no})}
+  a.cat=$('#xc').value;a.no=no;a.name=name;a.bal=Math.abs(+$('#xb').value||0)*+$('#xt').value;
+  D.moves.forEach(m=>{if(m.acc==no)m.party=name});
+  AC=a.cat;save();acc();
+}
+function delAcc(no){
+  const a=D.acc.find(x=>x.no==no);if(!a)return;
+  const n=led(a).length;
+  if(!confirm('"'+a.name+'" hata dein?'+(n?'\nIs account ki '+n+' entries hain, un ka hisaab is account mein nahi rahega.':'')))return;
+  D.acc=D.acc.filter(x=>x!==a);save();acc();
+}
+function stmt(no){AM='one';AP=accName(no);RT='a';RF='';RTO='';go('rep')}
+function editEnt(k,id){
+  if(k=='m'){const m=D.moves.find(x=>x.id==id);if(!m)return;go(m.type=='out'?'sale':'pur');EID=id;ent(m.type)}
+  else{const p=(D.pay||[]).find(x=>x.id==id);if(!p)return;go('pay');PID=id;pay()}
+  scrollTo(0,0);
+}
+function editItem(k){
+  const i=D.items[k];if(!i)return;
+  const s=Math.round((stk()[i.name]||0)*1000)/1000;
+  $('#v').innerHTML=`<div class="card" style="border:2px solid #0369a1"><b>Item edit</b>
+  <small>Naam</small><input id="en" value="${esc(i.name)}">
+  <small>Code</small><input id="ec" value="${esc(i.code||'')}">
+  <small>Category</small><select id="eg">${['Fabric','Grey','Yarn','Other'].map(c=>`<option ${c==(i.cat||'Other')?'selected':''}>${c}</option>`).join('')}</select>
+  <small>Unit</small><input id="eu" list="eul" value="${esc(i.unit)}"><datalist id="eul"><option>thaan</option><option>meter</option><option>kg</option><option>lbs</option><option>bags</option></datalist>
+  <small>Mojooda stock (ab gudam mein kitna hai)</small><input id="es" type="number" step="any" value="${s}">
+  <button onclick="saveItem(${k})">Save</button>
+  <button class="g" onclick="inv()">Cancel</button>
+  <button style="background:#b91c1c" onclick="delItem(${k})">Item hata dein</button></div>`;
+  scrollTo(0,0);
+}
+function saveItem(k){
+  const i=D.items[k];if(!i)return;
+  const old=i.name,n=$('#en').value.trim(),u=$('#eu').value.trim();
+  if(!n||!u)return alert('Naam aur unit likhein');
+  if(D.items.some((x,j)=>j!=k&&x.name.toLowerCase()==n.toLowerCase()))return alert('Is naam ka item pehle se hai');
+  const sv=$('#es').value,cs=stk()[old]||0;
+  if(n!=old)D.moves.forEach(m=>{if(m.item==old)m.item=n});
+  i.name=n;i.code=$('#ec').value.trim();i.cat=$('#eg').value;i.unit=u;
+  if(sv!==''&&!isNaN(+sv)){
+    const diff=Math.round((+sv-cs)*1000)/1000;
+    if(diff){const o=D.moves.find(m=>m.type=='open'&&m.item==n);
+      if(o)o.qty=Math.round((o.qty+diff)*1000)/1000;
+      else D.moves.push({id:Date.now(),date:today(),type:'open',item:n,qty:diff,party:'',note:'adjust'})}
+  }
+  save();inv();
+}
+function delItem(k){
+  const i=D.items[k];if(!i)return;
+  const n=D.moves.filter(m=>m.item==i.name&&m.type!='open').length;
+  if(!confirm('"'+i.name+'" hata dein?'+(n?'\nIs ki '+n+' sale/purchase entries bhi hat jayengi.':'')))return;
+  D.moves=D.moves.filter(m=>m.item!=i.name);D.items.splice(k,1);save();inv();
 }
 const dl=()=>'<datalist id="apl">'+D.acc.map(a=>'<option value="'+esc(a.name)+'">').join('')+'</datalist>';
 const accBy=n=>D.acc.find(a=>a.name.toLowerCase()==String(n).trim().toLowerCase());
@@ -352,10 +425,10 @@ const accName=no=>(D.acc.find(a=>a.no==no)||{}).name||no;
 const bs=v=>v>0?fmt(v)+' Dr':v<0?fmt(-v)+' Cr':'0';
 function led(a){
   const E=[];
-  D.moves.forEach(m=>{if((m.type=='out'||m.type=='in')&&m.total>0&&m.acc==a.no)E.push({d:m.date,id:m.id,t:(m.type=='out'?'Sale ':'Purchase ')+m.item+' '+fmt(m.qty)+' x '+fmt(m.rate),dr:m.type=='out'?m.total:0,cr:m.type=='in'?m.total:0})});
+  D.moves.forEach(m=>{if((m.type=='out'||m.type=='in')&&m.total>0&&m.acc==a.no)E.push({k:'m',d:m.date,id:m.id,t:(m.type=='out'?'Sale ':'Purchase ')+m.item+' '+fmt(m.qty)+' x '+fmt(m.rate),dr:m.type=='out'?m.total:0,cr:m.type=='in'?m.total:0})});
   (D.pay||[]).forEach(p=>{
-    if(p.acc==a.no)E.push({d:p.date,id:p.id,t:(p.type=='rcv'?'Payment mili':'Payment di')+(p.note?' - '+p.note:''),dr:p.type=='paid'?p.amt:0,cr:p.type=='rcv'?p.amt:0});
-    if(p.bank==a.no)E.push({d:p.date,id:p.id,t:(p.type=='rcv'?'Mili: ':'Di: ')+accName(p.acc),dr:p.type=='rcv'?p.amt:0,cr:p.type=='paid'?p.amt:0});
+    if(p.acc==a.no)E.push({k:'p',d:p.date,id:p.id,t:(p.type=='rcv'?'Payment mili':'Payment di')+(p.note?' - '+p.note:''),dr:p.type=='paid'?p.amt:0,cr:p.type=='rcv'?p.amt:0});
+    if(p.bank==a.no)E.push({k:'p',d:p.date,id:p.id,t:(p.type=='rcv'?'Mili: ':'Di: ')+accName(p.acc),dr:p.type=='rcv'?p.amt:0,cr:p.type=='paid'?p.amt:0});
   });
   return E.sort((x,y)=>x.d<y.d?-1:x.d>y.d?1:x.id-y.id);
 }
@@ -400,24 +473,31 @@ async function bill(id){
 }
 let PT='rcv';
 function pay(){
-  const B=D.acc.filter(a=>a.cat=='B'),L=[...(D.pay||[])].sort((a,b)=>b.id-a.id).slice(0,15);
-  $('#v').innerHTML=`<div class="tabs"><button class="${PT=='rcv'?'':'g'}" onclick="PT='rcv';pay()">Received (mili)</button><button class="${PT=='paid'?'':'g'}" onclick="PT='paid';pay()">Paid (di)</button></div>
-  <div class="card"><b>${PT=='rcv'?'Payment mili (party se wasool)':'Payment di (party ko ada)'}</b>
-  <input id="pa" list="apl" placeholder="Party (Accounts se chunein)">${dl()}
-  <input id="pm" type="number" step="any" placeholder="Raqam">
-  <select id="pb"><option value="">Bank / Cheque account nahi</option>${B.map(a=>`<option value="${esc(a.no)}">${esc(a.name)}</option>`).join('')}</select>
-  <input id="pd" type="date" value="${today()}"><input id="pn" placeholder="Note (cheque no, tafseel...)">
-  <button onclick="savePay()">Save</button></div><b>Aakhri payments</b>`
-  +(L.map(p=>`<div class="card row"><span>${p.type=='rcv'?'Mili':'Di'}: <b>${fmt(p.amt)}</b> - ${esc(accName(p.acc))}<br><small>${p.date} ${p.bank?esc(accName(p.bank)):''} ${esc(p.note||'')}</small></span><button class="x" onclick="delPay(${p.id})">✕</button></div>`).join('')||'<div class="card">Koi payment nahi</div>');
+  const B=D.acc.filter(a=>a.cat=='B'),all=D.pay||[],P=PID?all.find(p=>p.id==PID):null;
+  if(!P)PID=null;else PT=P.type;
+  const L=[...all].sort((a,b)=>a.date<b.date?1:a.date>b.date?-1:b.id-a.id),p=P||{};
+  $('#v').innerHTML=`<div class="tabs"><button class="${PT=='rcv'?'':'g'}" onclick="PID=null;PT='rcv';pay()">Received (mili)</button><button class="${PT=='paid'?'':'g'}" onclick="PID=null;PT='paid';pay()">Paid (di)</button></div>
+  <div class="card" ${P?'style="border:2px solid #0369a1"':''}><b>${(PT=='rcv'?'Payment mili (party se wasool)':'Payment di (party ko ada)')+(P?' - EDIT':'')}</b>
+  <input id="pa" list="apl" placeholder="Party (Accounts se chunein)" value="${P?esc(accName(p.acc)):''}">${dl()}
+  <input id="pm" type="number" step="any" placeholder="Raqam" value="${p.amt||''}">
+  <select id="pb"><option value="">Bank / Cheque account nahi</option>${B.map(a=>`<option value="${esc(a.no)}" ${a.no==p.bank?'selected':''}>${esc(a.name)}</option>`).join('')}</select>
+  <input id="pd" type="date" value="${p.date||today()}"><input id="pn" placeholder="Note (cheque no, tafseel...)" value="${esc(p.note||'')}">
+  <button onclick="savePay()">${P?'Update karein':'Save'}</button>${P?`<button class="g" onclick="PID=null;pay()">Cancel</button>`:''}</div>
+  <b>Saari payments (${L.length})</b>
+  <input placeholder="Party / note dhoondein..." oninput="fp(this.value)">`
+  +(L.map(q=>`<div class="card row pc" data-n="${esc((accName(q.acc)+' '+(q.note||'')).toLowerCase())}"><span>${q.type=='rcv'?'Mili':'Di'}: <b>${fmt(q.amt)}</b> - ${esc(accName(q.acc))}<br><small>${q.date} ${q.bank?esc(accName(q.bank)):''} ${esc(q.note||'')}</small></span><span style="display:flex;gap:4px"><button class="x" style="background:#0369a1" onclick="PID=${q.id};pay();scrollTo(0,0)">Edit</button><button class="x" onclick="delPay(${q.id})">✕</button></span></div>`).join('')||'<div class="card">Koi payment nahi</div>');
 }
+function fp(v){v=v.toLowerCase();document.querySelectorAll('.pc').forEach(e=>e.style.display=e.dataset.n.includes(v)?'':'none')}
 function savePay(){
   const A=accBy($('#pa').value),amt=+$('#pm').value;
   if(!A)return alert('Party Accounts mein se chunein');
   if(!(amt>0))return alert('Raqam likhein');
-  (D.pay=D.pay||[]).push({id:Date.now(),date:$('#pd').value||today(),type:PT,acc:A.no,amt,bank:$('#pb').value,note:$('#pn').value.trim()});
-  save();pay();
+  const o={date:$('#pd').value||today(),type:PT,acc:A.no,amt,bank:$('#pb').value,note:$('#pn').value.trim()};
+  const P=PID?(D.pay||[]).find(p=>p.id==PID):null;
+  if(P)Object.assign(P,o);else(D.pay=D.pay||[]).push({id:Date.now(),...o});
+  PID=null;save();pay();
 }
-function delPay(id){if(confirm('Ye payment hata dein?')){D.pay=D.pay.filter(p=>p.id!=id);save();pay()}}
+function delPay(id){if(confirm('Ye payment hata dein?')){D.pay=D.pay.filter(p=>p.id!=id);PID=null;save();pay()}}
 let RT='s',AM='all',AP='',RD=today(),RF='',RTO='';
 const rtSw=()=>`<div class="tabs" style="margin-bottom:8px"><button class="${RT=='s'?'':'g'}" onclick="RT='s';draw()">Stock Report</button><button class="${RT=='a'?'':'g'}" onclick="RT='a';draw()">Account Report</button></div>`;
 function arep(){
@@ -430,9 +510,9 @@ function arep(){
     $('#v').innerHTML=sw+`<input list="apl" placeholder="Party chunein" value="${esc(AP)}" onchange="AP=this.value;arep()">${dl()}
     <small>Se</small><input type="date" value="${RF}" onchange="RF=this.value;arep()"><small>Tak</small><input type="date" value="${RTO}" onchange="RTO=this.value;arep()">
     ${a?'<button onclick="spdf()">PDF banayein / Share</button>':''}<div id="pl"></div></div>`
-    +(a?`<div class="card"><div style="overflow-x:auto"><table class="sm"><tr><th>Date / Detail</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Balance</th></tr>
+    +(a?`<div class="card"><small>Kisi entry ko badalne ya hatane ke liye us row par dabayein.</small><div style="overflow-x:auto"><table class="sm"><tr><th>Date / Detail</th><th class="n">Debit</th><th class="n">Credit</th><th class="n">Balance</th></tr>
     <tr><td>Opening balance</td><td></td><td></td><td class="n">${bs(R.o)}</td></tr>
-    ${R.rows.map(e=>`<tr><td>${e.d}<br><small>${esc(e.t)}</small></td><td class="n">${e.dr?fmt(e.dr):''}</td><td class="n">${e.cr?fmt(e.cr):''}</td><td class="n">${bs(e.bal)}</td></tr>`).join('')}
+    ${R.rows.map(e=>`<tr class="ar" onclick="editEnt('${e.k}',${e.id})"><td>${e.d}<br><small>${esc(e.t)}</small></td><td class="n">${e.dr?fmt(e.dr):''}</td><td class="n">${e.cr?fmt(e.cr):''}</td><td class="n">${bs(e.bal)}</td></tr>`).join('')}
     <tr class="ft"><td>Total / Closing</td><td class="n">${fmt(R.td)}</td><td class="n">${fmt(R.tc)}</td><td class="n">${bs(R.c)}</td></tr></table></div></div>`:'');
   }
 }
